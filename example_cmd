@@ -1,0 +1,11 @@
+TO RUN LAMBDA USING DOCKER
+
+docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x my_handler '{"some": "event"}'
+
+
+BUILD DOCKER FILE AND RUN IT... (json string is an example...)
+
+GOOS=linux go build githubparser && \
+rm -f githubparser.zip && \
+zip githubparser.zip githubparser && \
+docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x githubparser '{"ID": "fd"}'
