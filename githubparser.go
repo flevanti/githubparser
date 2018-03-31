@@ -100,7 +100,10 @@ func processRequest(request Request) (error) {
 	}
 
 	for k, commit := range request.Commits {
+		filesChanged := append(commit.Added, commit.Modified...)
+		filesChanged = append(filesChanged, commit.Removed...)
 		e("Processing commit #" + strconv.Itoa(k) + "  " + commit.ID)
+		e(strconv.Itoa(len(filesChanged)) + " files to process")
 	}
 
 	return nil
