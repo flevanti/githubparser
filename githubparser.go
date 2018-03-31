@@ -17,16 +17,20 @@ import (
 
 var isAWS bool
 var metadata map[string]string //we could add {} at the end to initialise the map...
-var rules []rule
+var rules []Rule
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
 var receiptLogLevel = 4
-var receipt []string
+var receipt []Receipt
 
-type rule struct {
+type Rule struct {
 	allowed bool
 	path    string
+}
+type Receipt struct {
+	level   int
+	message string
 }
 
 // this is the structure of the github webhook payload
@@ -302,6 +306,7 @@ func loadConfig() (error) {
 	} else {
 		return errors.New("config file not found")
 	}
+
 	return nil
 }
 
@@ -322,8 +327,15 @@ func loadConfigMD(line string) (error) {
 		addToReceipt("unable to find value in metadata element", 4)
 		return errors.New("metadata line bad syntax, value is empty")
 	}
-	addToReceipt("Element ["+key+"] added to metadata with value ["+value+"]", 4)
+	addToReceipt("element ["+key+"] added to metadata with value ["+value+"]", 4)
 	metadata[key] = value
+
+	//update known parameters...
+	if key == "verboselevel" {
+		valueToInt, _ := strconv.Atoi(value)
+		addToReceipt("updating receipt log level to "+strconv.Itoa(valueToInt), 4)
+		receiptLogLevel = valueToInt
+	}
 
 	return nil
 }
@@ -345,12 +357,14 @@ func checkIfAWS() {
 }
 
 func addToReceipt(line string, verboseLevel int) {
-	receiptFlag := "[RECEIPT - NOT ADDED]"
+
 	if verboseLevel <= receiptLogLevel {
-		receipt = append(receipt, line)
-		receiptFlag = "[RECEIPT]"
+		receiptRecord := new(Receipt)
+		receiptRecord.level = verboseLevel
+		receiptRecord.message = line
+		receipt = append(receipt, *receiptRecord)
 	}
-	e(line + "  " + receiptFlag)
+	e(line + "  [RECEIPT]")
 }
 
 func e(line string) {
