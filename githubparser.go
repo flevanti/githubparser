@@ -9,11 +9,18 @@ import (
 	"encoding/json"
 	"os"
 	"bufio"
+	"time"
+	"strconv"
 )
 
 var isAWS bool
 var metadata map[string]string //we could add {} at the end to initialise the map...
 var rules []string
+var projrootprefix = "[PROOT]"
+var configFileName = "config"
+var dummyPayloadFileName = "payload"
+var receiptLogLevel = 4
+var receipt []string
 
 // this is the structure of the github webhook payload
 // element not needed are commented to use less memory
@@ -192,10 +199,6 @@ type Request struct {
 }
 
 func main() {
-	//initialise
-	metadata = make(map[string]string)
-	checkIfAWS()
-	loadConfig()
 	if isAWS {
 		lambda.Start(Handler)
 	} else {
@@ -208,12 +211,21 @@ func main() {
 	}
 }
 
+func Handler(request Request) (string, error) {
+	//initialise
+	metadata = make(map[string]string)
+	greetings()
+	checkIfAWS()
+	loadConfig()
+	request = request
+	return "", nil
+}
+
 func loadDummyPayloadFile() (Request) {
-	file := "payload"
-	if (fileExists(file)) {
+	if fileExists(dummyPayloadFileName) {
 		var request Request
 
-		content, err := ioutil.ReadFile(file)
+		content, err := ioutil.ReadFile(dummyPayloadFileName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -231,14 +243,39 @@ func fileExists(file string) (bool) {
 }
 
 func loadConfig() {
-	file := "config"
-	if fileExists(file) {
-		fileHandle, _ := os.Open(file)
+	addToReceipt("Reading config file ["+configFileName+"]", 2)
+	var line string
+	var c int
+	if fileExists(configFileName) {
+		fileHandle, _ := os.Open(configFileName)
 		defer fileHandle.Close()
 		fileScanner := bufio.NewScanner(fileHandle)
-
 		for fileScanner.Scan() {
-			fmt.Println(fileScanner.Text())
+			c++
+			line = fileScanner.Text()
+			addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", 4)
+			if len(line) < 3 {
+				addToReceipt("Line too short, considered empty. Skipped", 4)
+				continue
+			}
+			switch line[:2] {
+			case "MD":
+				loadConfigMD(line)
+			case "OK":
+				break
+			case "KO":
+				break
+			case "###":
+			case "///":
+			case "---":
+				addToReceipt("Line is a comment, skipped", 4)
+				break
+			default:
+				addToReceipt("Prefix not valid, skipped", 4)
+
+			}
+
+			//fmt.Println(fileScanner.Text())
 		}
 	} else {
 		panic("CONFIG NOT FOUND")
@@ -246,18 +283,17 @@ func loadConfig() {
 
 }
 
-func greetings() {
-	if isAWS {
-		fmt.Println("Hello Jeff")
-	} else {
-		fmt.Println("Greetings Professor Falken")
-	}
+func loadConfigMD(line string) (error) {
+	line = line[2:]
+	return nil
 }
 
-func Handler(request Request) (string, error) {
-	greetings()
-	//fmt.Printf("Hello %+v \n", len(request.Commits))
-	return "", nil
+func greetings() {
+	if isAWS {
+		e("Hello Jeff")
+	} else {
+		e("Greetings Professor Falken")
+	}
 }
 
 func checkIfAWS() {
@@ -272,6 +308,29 @@ func printEnvVars() {
 	for _, pair := range os.Environ() {
 		fmt.Println(pair)
 	}
+}
+
+func addToReceipt(line string, verbose_level int) {
+	receipt_flag := "[RECEIPT - NOT ADDED]"
+	if verbose_level <= receiptLogLevel {
+		receipt = append(receipt, line)
+		receipt_flag = "[RECEIPT]"
+	}
+	e(line + "  " + receipt_flag)
+}
+
+func e(line string) {
+	fmt.Println(getTD() + "  " + line)
+}
+
+func getTD() (string) {
+	// time date formatting...
+	// https://golang.org/src/time/format.go
+	return time.Now().Format("2006-01-02 15:04:05.0000")
+}
+
+func sendReceipt() {
+
 }
 
 /*
