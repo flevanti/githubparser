@@ -20,6 +20,8 @@ var metadata map[string]string //we could add {} at the end to initialise the ma
 var rules []Rule
 var rulesOK int
 var rulesKO int
+var rulesResultOK []RuleResult
+var rulesResultKO []RuleResult
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
@@ -33,6 +35,11 @@ type Rule struct {
 type Receipt struct {
 	level   int
 	message string
+}
+type RuleResult struct {
+	path         string
+	allowed      bool
+	rulesApplied []string
 }
 
 // this is the structure of the github webhook payload
