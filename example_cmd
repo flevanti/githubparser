@@ -5,6 +5,7 @@ docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x my_handler '{"some": "ev
 
 BUILD DOCKER FILE AND RUN IT... (json string is an example...)
 
+COMMAND TO COMPILE THE APP FOR LINUX ENV (LAMBDA/LAMBDA DOCKER) + ZIP IT + RUN IT IN CONTAINER....
 GOOS=linux go build githubparser && \
 rm -f githubparser.zip && \
 zip githubparser.zip githubparser && \

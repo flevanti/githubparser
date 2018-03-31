@@ -260,18 +260,3 @@ func getTD() (string) {
 	// https://golang.org/src/time/format.go
 	return time.Now().Format("2006-01-02 15:04:05.0000")
 }
-
-/*
-
-GOOS=linux go build githubparser && \
-rm -f githubparser.zip && \
-zip githubparser.zip githubparser && \
-docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x githubparser '{"ID": "fd"}'
-
-func printEnvVars() {
-	for _, pair := range os.Environ() {
-		fmt.Println(pair)
-	}
-}
-
-*/
