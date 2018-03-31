@@ -11,16 +11,23 @@ import (
 	"bufio"
 	"time"
 	"strconv"
+	"strings"
+	"errors"
 )
 
 var isAWS bool
 var metadata map[string]string //we could add {} at the end to initialise the map...
-var rules []string
+var rules []rule
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
 var receiptLogLevel = 4
 var receipt []string
+
+type rule struct {
+	allowed bool
+	path    string
+}
 
 // this is the structure of the github webhook payload
 // element not needed are commented to use less memory
@@ -217,8 +224,17 @@ func Handler(request Request) (string, error) {
 	greetings()
 	checkIfAWS()
 	loadConfig()
-	request = request
+	fmt.Printf("%+v", metadata)
+	processRequest(request)
 	return "", nil
+}
+
+func processRequest(request Request) (error) {
+	if len(request.Commits) > 0 {
+		fmt.Println("commits!")
+	}
+
+	return nil
 }
 
 func loadDummyPayloadFile() (Request) {
@@ -242,10 +258,12 @@ func fileExists(file string) (bool) {
 	return false
 }
 
-func loadConfig() {
+func loadConfig() (error) {
 	addToReceipt("Reading config file ["+configFileName+"]", 2)
 	var line string
 	var c int
+	var prefix string
+	var err error
 	if fileExists(configFileName) {
 		fileHandle, _ := os.Open(configFileName)
 		defer fileHandle.Close()
@@ -258,12 +276,14 @@ func loadConfig() {
 				addToReceipt("Line too short, considered empty. Skipped", 4)
 				continue
 			}
-			switch line[:2] {
-			case "MD":
-				loadConfigMD(line)
-			case "OK":
+			prefix = line[0:3]
+			line = strings.TrimSpace(line[3:])
+			switch prefix {
+			case "MDT":
+				err = loadConfigMD(line)
+			case "OKK":
 				break
-			case "KO":
+			case "KOO":
 				break
 			case "###":
 			case "///":
@@ -275,16 +295,36 @@ func loadConfig() {
 
 			}
 
-			//fmt.Println(fileScanner.Text())
+			if err != nil {
+				return err
+			}
 		}
 	} else {
-		panic("CONFIG NOT FOUND")
+		return errors.New("config file not found")
 	}
-
+	return nil
 }
 
 func loadConfigMD(line string) (error) {
-	line = line[2:]
+	index := strings.Index(line, "=")
+	if index < 0 {
+		addToReceipt("Unable to find [=] assignment in metadata element", 4)
+		return errors.New("metadata line bad syntax, missing assignment operator")
+	}
+
+	key := strings.TrimSpace(line[:index])
+	value := strings.TrimSpace(line[index:])
+	if len(key) == 0 {
+		addToReceipt("unable to find key in metadata element", 4)
+		return errors.New("metadata line bad syntax, key is empty")
+	}
+	if len(value) == 0 {
+		addToReceipt("unable to find value in metadata element", 4)
+		return errors.New("metadata line bad syntax, value is empty")
+	}
+	addToReceipt("Element ["+key+"] added to metadata with value ["+value+"]", 4)
+	metadata[key] = value
+
 	return nil
 }
 
@@ -304,19 +344,13 @@ func checkIfAWS() {
 	}
 }
 
-func printEnvVars() {
-	for _, pair := range os.Environ() {
-		fmt.Println(pair)
-	}
-}
-
-func addToReceipt(line string, verbose_level int) {
-	receipt_flag := "[RECEIPT - NOT ADDED]"
-	if verbose_level <= receiptLogLevel {
+func addToReceipt(line string, verboseLevel int) {
+	receiptFlag := "[RECEIPT - NOT ADDED]"
+	if verboseLevel <= receiptLogLevel {
 		receipt = append(receipt, line)
-		receipt_flag = "[RECEIPT]"
+		receiptFlag = "[RECEIPT]"
 	}
-	e(line + "  " + receipt_flag)
+	e(line + "  " + receiptFlag)
 }
 
 func e(line string) {
@@ -329,14 +363,17 @@ func getTD() (string) {
 	return time.Now().Format("2006-01-02 15:04:05.0000")
 }
 
-func sendReceipt() {
-
-}
-
 /*
 
 GOOS=linux go build githubparser && \
 rm -f githubparser.zip && \
 zip githubparser.zip githubparser && \
 docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x githubparser '{"ID": "fd"}'
+
+func printEnvVars() {
+	for _, pair := range os.Environ() {
+		fmt.Println(pair)
+	}
+}
+
 */
