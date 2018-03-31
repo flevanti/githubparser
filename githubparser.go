@@ -18,6 +18,8 @@ import (
 var isAWS bool
 var metadata map[string]string //we could add {} at the end to initialise the map...
 var rules []Rule
+var rulesOK int
+var rulesKO int
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
@@ -81,16 +83,17 @@ func Handler(request Request) (string, error) {
 	metadata = make(map[string]string)
 	greetings()
 	loadConfig()
-	fmt.Printf("METADATA:\n%+v\n", metadata)
-	fmt.Printf("RULES:\n%+v\n", rules)
-
 	processRequest(request)
 	return "", nil
 }
 
 func processRequest(request Request) (error) {
 	if len(request.Commits) > 0 {
-		fmt.Println("")
+		addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", 1)
+	}
+
+	for k, commit := range request.Commits {
+		e("Processing commit #" + strconv.Itoa(k) + "  " + commit.ID)
 	}
 
 	return nil
@@ -124,46 +127,52 @@ func loadConfig() (error) {
 	var c int
 	var prefix string
 	var err error
-	if fileExists(configFileName) {
-		fileHandle, _ := os.Open(configFileName)
-		defer fileHandle.Close()
-		fileScanner := bufio.NewScanner(fileHandle)
-		for fileScanner.Scan() {
-			c++
-			line = fileScanner.Text()
-			addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", 4)
-			if len(line) < 3 {
-				addToReceipt("Line too short, considered empty. Skipped", 4)
-				continue
-			}
-			prefix = line[0:3]
-			line = strings.TrimSpace(line[3:])
-			switch prefix {
-			case "MDT":
-				err = loadConfigMD(line)
-			case "OKK", "KOO":
-
-				err = loadConfigRule(line, prefix == "OKK")
-				break
-			case "###", "///", "---":
-				addToReceipt("Line is a comment, skipped", 4)
-				break
-			default:
-				addToReceipt("Prefix not valid, skipped", 4)
-
-			}
-
-			if err != nil {
-				return err
-			}
-		}
-	} else {
+	if !fileExists(configFileName) {
 		return errors.New("config file not found")
 	}
+	fileHandle, _ := os.Open(configFileName)
+	defer fileHandle.Close()
+	fileScanner := bufio.NewScanner(fileHandle)
+	for fileScanner.Scan() {
+		c++
+		line = fileScanner.Text()
+		addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", 4)
+		if len(line) < 3 {
+			addToReceipt("Line too short, considered empty. Skipped", 4)
+			continue
+		}
+		prefix = line[0:3]
+		line = strings.TrimSpace(line[3:])
+		switch prefix {
+		case "MDT":
+			err = loadConfigMetadata(line)
+		case "OKK", "KOO":
+			err = loadConfigRule(line, prefix == "OKK")
+			break
+		case "###", "///", "---":
+			addToReceipt("Line is a comment, skipped", 4)
+			break
+		default:
+			addToReceipt("Prefix not valid, skipped", 4)
+		} //end switch
+		if err != nil {
+			return err
+		}
+	} //end Scan loop
 
+	addToReceipt("Configuration file loaded: "+
+		strconv.Itoa(rulesOK)+ " OK rules, "+
+		strconv.Itoa(rulesKO)+ " KO rules, "+
+		strconv.Itoa(len(metadata))+ " metadata", 1)
 	return nil
 }
+
 func loadConfigRule(line string, isOKK bool) (error) {
+	if isOKK {
+		rulesOK++
+	} else {
+		rulesKO++
+	}
 	rule := new(Rule)
 	rule.allowed = isOKK
 	if line[0:1] == "/" {
@@ -175,7 +184,7 @@ func loadConfigRule(line string, isOKK bool) (error) {
 	return nil
 }
 
-func loadConfigMD(line string) (error) {
+func loadConfigMetadata(line string) (error) {
 	index := strings.Index(line, "=")
 	if index < 0 {
 		addToReceipt("Unable to find [=] assignment in metadata element", 4)
