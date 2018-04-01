@@ -24,6 +24,7 @@ var rulesOK int
 var rulesKO int
 var rulesNA int
 var rulesResults []RuleResult
+var rulesResultsCountKO int
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
@@ -125,17 +126,13 @@ func sendReceipt() {
 	var message string
 	message += "RECEIPT GENERATED " + getDT() + "\n\n"
 
-	if rulesKO > 0 {
-		message += "*" + strconv.Itoa(rulesKO) + " files matched protected paths*\n\n"
-	}
+	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
 
 	sendSlack(message)
 }
 
 func processRequest(request Request) (error) {
-	if len(request.Commits) > 0 {
-		addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", true)
-	}
+	addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", true)
 
 	//loop through commits....
 	for k, commit := range request.Commits {
@@ -182,13 +179,11 @@ func processRequestFile(filename string) {
 
 	//keep some statistics....
 	if rulesResultCurrent.allowed == 1 {
-		rulesOK++
 		allowedString = "ALLOWED"
 	} else if rulesResultCurrent.allowed == 0 {
-		rulesKO++
+		rulesResultsCountKO++
 		allowedString = "NOT ALLOWED"
 	} else {
-		rulesNA++
 		allowedString = "NOT MONITORED"
 	}
 
@@ -292,7 +287,7 @@ func loadConfigMetadata(line string) (error) {
 	}
 
 	key := strings.TrimSpace(line[:index])
-	value := strings.TrimSpace(line[index:])
+	value := strings.TrimSpace(line[index+1:])
 	if len(key) == 0 {
 		addToReceipt("unable to find key in metadata element", true)
 		return errors.New("metadata line bad syntax, key is empty")
