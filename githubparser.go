@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"log"
 	"github.com/bluele/slack"
+	"github.com/joho/godotenv"
 )
 
 var isAWS bool
@@ -92,12 +93,12 @@ func main() {
 }
 
 func sendSlack(message string) {
-	hook := slack.NewWebHook("https://hooks.slack.com/services/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")
+	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
 	err := hook.PostMessage(&slack.WebHookPostPayload{
 		Text:      message,
-		Channel:   "#githubparser",
-		IconEmoji: ":marioface:",
-		Username:  "githubparser",
+		Channel:   os.Getenv("SLACK_CHANNEL"),
+		IconEmoji: os.Getenv("SLACK_EMOJI"),
+		Username:  os.Getenv("SLACK_USERNAME"),
 	})
 	if err != nil {
 		panic(err)
@@ -105,10 +106,16 @@ func sendSlack(message string) {
 }
 
 func Handler(request Request) (string, error) {
+	greetings()
 	//initialise
 	metadata = make(map[string]string)
-	greetings()
-	loadConfig()
+	//read .env variables
+	if err := godotenv.Load(); err != nil {
+		return "unable to read .env file", err
+	}
+	if err := loadConfig(); err != nil {
+		return "", err
+	}
 	processRequest(request)
 	sendReceipt()
 	return "", nil
@@ -121,9 +128,6 @@ func sendReceipt() {
 	if rulesKO > 0 {
 		message += "*" + strconv.Itoa(rulesKO) + " files matched protected paths*\n\n"
 	}
-
-	
-
 
 	sendSlack(message)
 }
@@ -210,16 +214,18 @@ func fileExists(file string) (bool) {
 	if _, err := os.Stat(file); err == nil {
 		return true
 	}
+
 	return false
 }
 
 func loadConfig() (error) {
-	addToReceipt("Reading config file ["+configFileName+"]", true)
+	addToReceipt("Reading config file ["+configFileName+"]", false)
 	var line string
 	var c int
 	var prefix string
 	var err error
 	if !fileExists(configFileName) {
+		addToReceipt("Reading config file ["+configFileName+"]", false)
 		return errors.New("config file not found")
 	}
 	fileHandle, _ := os.Open(configFileName)
