@@ -20,9 +20,8 @@ var metadata map[string]string //we could add {} at the end to initialise the ma
 var rules []Rule
 var rulesOK int
 var rulesKO int
-var rulesResultOK []RuleResult
-var rulesResultKO []RuleResult
-var rulesResultNA []RuleResult
+var rulesNA int
+var rulesResults []RuleResult
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
@@ -30,7 +29,7 @@ var receiptLogLevel = 4
 var receipt []Receipt
 
 type Rule struct {
-	allowed      bool
+	allowed      int
 	path         string
 	originalpath string
 }
@@ -39,9 +38,10 @@ type Receipt struct {
 	message string
 }
 type RuleResult struct {
+	allowed      int
 	path         string
-	allowed      bool
-	rulesApplied []string
+	originalpath string
+	rulesApplied []Rule
 }
 
 // this is the structure of the github webhook payload
@@ -102,8 +102,10 @@ func processRequest(request Request) (error) {
 		addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", 1)
 	}
 
+	//loop through commits....
 	for k, commit := range request.Commits {
-		//we can merge only 2 elements.. se to merge 3 elements we need to do it twice
+		// merge all changed (new/updated/removed) files into one element
+		// we can merge only 2 elements.. se to merge 3 elements we need to do it twice
 		// example... elements A B C
 		// TOT = A+B (two elements)
 		// TOT = TOT + C (add the third element)
@@ -111,19 +113,55 @@ func processRequest(request Request) (error) {
 		filesChanged = append(filesChanged, commit.Removed...)
 		e("Processing commit #" + strconv.Itoa(k) + "  " + commit.ID)
 		e(strconv.Itoa(len(filesChanged)) + " files to process")
+		//loop through files changed....
 		for _, filename := range filesChanged {
 			processRequestFile(filename)
-		}
-
-	}
+		} //end fileschanged for loop
+		addToReceipt("-------------------------------", 3)
+	} //end for each commit loop
 
 	return nil
 }
 
 func processRequestFile(filename string) {
-	e("file " + filename)
-	filenameWithPrefix = projrootprefix + "/" + filename
+	var rulesResultCurrent RuleResult
+	var allowedString string
 
+	filenameWithPrefix := projrootprefix + "/" + filename
+	rulesResultCurrent.path = filenameWithPrefix
+	rulesResultCurrent.originalpath = filename
+	rulesResultCurrent.allowed = -1 //by default we don't know if file is allowed (1) or not allowed (0)
+	e("file " + filenameWithPrefix)
+	//loop through rules to check if files is "under control"
+	for _, rule := range rules {
+		addToReceipt("Applying rule "+rule.path, 4)
+		if strings.Contains(filenameWithPrefix, rule.path) {
+			addToReceipt("Rule matches file", 4)
+			//we have a match, add the rule to the list of rules applied to the current file...
+			rulesResultCurrent.rulesApplied = append(rulesResultCurrent.rulesApplied, rule)
+			rulesResultCurrent.allowed = rule.allowed
+		} else { //end if rule match the path...
+			addToReceipt("Rule does not match file", 4)
+		}
+	} //end rules for loop
+
+	//keep some statistics....
+	if rulesResultCurrent.allowed == 1 {
+		rulesOK++
+		allowedString = "ALLOWED"
+	} else if rulesResultCurrent.allowed == 0 {
+		rulesKO++
+		allowedString = "NOT ALLOWED"
+	} else {
+		rulesNA++
+		allowedString = "NOT MONITORED"
+	}
+
+	addToReceipt("File matched by "+strconv.Itoa(len(rulesResultCurrent.rulesApplied))+" rules, the final result is "+allowedString, 2)
+
+	//add the processed file to the list of processed files...
+	rulesResults = append(rulesResults, rulesResultCurrent)
+	addToReceipt("-------------------------------", 4)
 }
 
 func loadDummyPayload() (Request) {
@@ -174,9 +212,9 @@ func loadConfig() (error) {
 	for fileScanner.Scan() {
 		c++
 		line = fileScanner.Text()
-		addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", 4)
+		addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", 6)
 		if len(line) < 3 {
-			addToReceipt("Line too short, considered empty. Skipped", 4)
+			addToReceipt("Line too short, considered empty. Skipped", 6)
 			continue
 		}
 		prefix = line[0:3]
@@ -188,10 +226,10 @@ func loadConfig() (error) {
 			err = loadConfigRule(line, prefix == "OKK")
 			break
 		case "###", "///", "---":
-			addToReceipt("Line is a comment, skipped", 4)
+			addToReceipt("Line is a comment, skipped", 6)
 			break
 		default:
-			addToReceipt("Prefix not valid, skipped", 4)
+			addToReceipt("Prefix not valid, skipped", 6)
 		} //end switch
 		if err != nil {
 			return err
@@ -206,47 +244,48 @@ func loadConfig() (error) {
 }
 
 func loadConfigRule(line string, isOKK bool) (error) {
+	rule := new(Rule)
 	if isOKK {
 		rulesOK++
+		rule.allowed = 1
 	} else {
 		rulesKO++
+		rule.allowed = 0
 	}
-	rule := new(Rule)
-	rule.allowed = isOKK
 	rule.originalpath = line
 	if line[0:1] == "/" {
 		line = projrootprefix + line
 	}
 	rule.path = line
 	rules = append(rules, *rule)
-	addToReceipt("rule ["+rule.originalpath+"] is allowed ["+strconv.FormatBool(isOKK)+"]", 4)
+	addToReceipt("rule ["+rule.originalpath+"] is allowed ["+strconv.FormatBool(isOKK)+"]", 6)
 	return nil
 }
 
 func loadConfigMetadata(line string) (error) {
 	index := strings.Index(line, "=")
 	if index < 0 {
-		addToReceipt("Unable to find [=] assignment in metadata element", 4)
+		addToReceipt("Unable to find [=] assignment in metadata element", 6)
 		return errors.New("metadata line bad syntax, missing assignment operator")
 	}
 
 	key := strings.TrimSpace(line[:index])
 	value := strings.TrimSpace(line[index:])
 	if len(key) == 0 {
-		addToReceipt("unable to find key in metadata element", 4)
+		addToReceipt("unable to find key in metadata element", 6)
 		return errors.New("metadata line bad syntax, key is empty")
 	}
 	if len(value) == 0 {
-		addToReceipt("unable to find value in metadata element", 4)
+		addToReceipt("unable to find value in metadata element", 6)
 		return errors.New("metadata line bad syntax, value is empty")
 	}
-	addToReceipt("element ["+key+"] added to metadata with value ["+value+"]", 4)
+	addToReceipt("element ["+key+"] added to metadata with value ["+value+"]", 6)
 	metadata[key] = value
 
 	//update known parameters...
 	if key == "verboselevel" {
 		valueToInt, _ := strconv.Atoi(value)
-		addToReceipt("updating receipt log level to "+strconv.Itoa(valueToInt), 4)
+		addToReceipt("updating receipt log level to "+strconv.Itoa(valueToInt), 2)
 		receiptLogLevel = valueToInt
 	}
 
