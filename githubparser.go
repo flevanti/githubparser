@@ -4,8 +4,6 @@ package main
 import (
 	"fmt"
 	"github.com/aws/aws-lambda-go/lambda"
-	"io/ioutil"
-	"log"
 	"encoding/json"
 	"os"
 	"bufio"
@@ -13,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"errors"
+	"io/ioutil"
+	"log"
+	"github.com/bluele/slack"
 )
 
 var isAWS bool
@@ -90,13 +91,41 @@ func main() {
 	}
 }
 
+func sendSlack(message string) {
+	hook := slack.NewWebHook("https://hooks.slack.com/services/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")
+	err := hook.PostMessage(&slack.WebHookPostPayload{
+		Text:      message,
+		Channel:   "#githubparser",
+		IconEmoji: ":marioface:",
+		Username:  "githubparser",
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func Handler(request Request) (string, error) {
 	//initialise
 	metadata = make(map[string]string)
 	greetings()
 	loadConfig()
 	processRequest(request)
+	sendReceipt()
 	return "", nil
+}
+
+func sendReceipt() {
+	var message string
+	message += "RECEIPT GENERATED " + getDT() + "\n\n"
+
+	if rulesKO > 0 {
+		message += "*" + strconv.Itoa(rulesKO) + " files matched protected paths*\n\n"
+	}
+
+	
+
+
+	sendSlack(message)
 }
 
 func processRequest(request Request) (error) {
@@ -175,21 +204,6 @@ func loadDummyPayload() (Request) {
 	}
 	_ = json.Unmarshal([]byte(content), &request)
 	return request
-}
-
-func loadDummyPayloadFile() (Request) {
-	if fileExists(dummyPayloadFileName) {
-		var request Request
-
-		content, err := ioutil.ReadFile(dummyPayloadFileName)
-		if err != nil {
-			log.Fatal(err)
-		}
-		_ = json.Unmarshal(content, &request)
-		addToReceipt("Dummy payload loaded", true)
-		return request
-	}
-	panic("DUMMY PAYLOAD FILE NOT FOUND")
 }
 
 func fileExists(file string) (bool) {
@@ -315,17 +329,17 @@ func addToReceipt(line string, verboseReceipt bool) {
 	receiptRecord := new(Receipt)
 	receiptRecord.verboseReceipt = verboseReceipt
 	receiptRecord.message = line
-	receiptRecord.dateTime = getTD()
+	receiptRecord.dateTime = getDT()
 	receiptRecord.unixTime = int32(time.Now().Unix())
 	receipt = append(receipt, *receiptRecord)
 	e(line + "  [RECEIPT]")
 }
 
 func e(line string) {
-	fmt.Println(getTD() + "  " + line)
+	fmt.Println(getDT() + "  " + line)
 }
 
-func getTD() (string) {
+func getDT() (string) {
 	// time date formatting...
 	// https://golang.org/src/time/format.go
 	return time.Now().Format("2006-01-02 15:04:05.0000")
@@ -335,4 +349,19 @@ func printEnvVars() {
 	for _, pair := range os.Environ() {
 		fmt.Println(pair)
 	}
+}
+
+func loadDummyPayloadFile() (Request) {
+	if fileExists(dummyPayloadFileName) {
+		var request Request
+
+		content, err := ioutil.ReadFile(dummyPayloadFileName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		_ = json.Unmarshal(content, &request)
+		addToReceipt("Dummy payload loaded", true)
+		return request
+	}
+	panic("DUMMY PAYLOAD FILE NOT FOUND")
 }
