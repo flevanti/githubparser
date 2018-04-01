@@ -13,7 +13,12 @@ GOOS=linux go build githubparser && docker run --rm -e  AWS_LAMBDA_EVENT_BODY="$
 COMMAND TO RUN IT OUTSIDE DOCKER...
 export AWS_LAMBDA_EVENT_BODY=$(cat payload) && go run githubparser.go
 
-DEBUG
+DEBUG PHPSTORM
 in order to debug, it is necessary to add an env var in the debug configuration with the name AWS_LAMBDA_EVENT_BODY and
 value the content of the payload file
 this is because the debug session cannot read your current session env var (because your var is not in the bashrc)
+
+
+
+ZIP COMMAND FOR CREATING THE LAMBDA PACKAGE
+GOOS=linux go build githubparser && zip githubparser.zip githubparser config .env
