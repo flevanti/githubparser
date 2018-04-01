@@ -25,7 +25,7 @@ var rulesResults []RuleResult
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
-var receiptLogLevel = 4
+var verboseReceipt = 0
 var receipt []Receipt
 
 type Rule struct {
@@ -34,8 +34,10 @@ type Rule struct {
 	originalpath string
 }
 type Receipt struct {
-	level   int
-	message string
+	verboseReceipt bool
+	message        string
+	dateTime       string
+	unixTime       int32
 }
 type RuleResult struct {
 	allowed      int
@@ -99,7 +101,7 @@ func Handler(request Request) (string, error) {
 
 func processRequest(request Request) (error) {
 	if len(request.Commits) > 0 {
-		addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", 1)
+		addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", true)
 	}
 
 	//loop through commits....
@@ -111,13 +113,13 @@ func processRequest(request Request) (error) {
 		// TOT = TOT + C (add the third element)
 		filesChanged := append(commit.Added, commit.Modified...)
 		filesChanged = append(filesChanged, commit.Removed...)
-		e("Processing commit #" + strconv.Itoa(k) + "  " + commit.ID)
-		e(strconv.Itoa(len(filesChanged)) + " files to process")
+		addToReceipt("Processing commit #"+strconv.Itoa(k)+"  "+commit.ID, true)
+		addToReceipt(strconv.Itoa(len(filesChanged))+" files to process", true)
 		//loop through files changed....
 		for _, filename := range filesChanged {
 			processRequestFile(filename)
 		} //end fileschanged for loop
-		addToReceipt("-------------------------------", 3)
+		addToReceipt("-------------------------------", true)
 	} //end for each commit loop
 
 	return nil
@@ -131,17 +133,17 @@ func processRequestFile(filename string) {
 	rulesResultCurrent.path = filenameWithPrefix
 	rulesResultCurrent.originalpath = filename
 	rulesResultCurrent.allowed = -1 //by default we don't know if file is allowed (1) or not allowed (0)
-	e("file " + filenameWithPrefix)
+	addToReceipt("file "+filenameWithPrefix, true)
 	//loop through rules to check if files is "under control"
 	for _, rule := range rules {
-		addToReceipt("Applying rule "+rule.path, 4)
+		addToReceipt("Applying rule "+rule.path, true)
 		if strings.Contains(filenameWithPrefix, rule.path) {
-			addToReceipt("Rule matches file", 4)
+			addToReceipt("Rule matches file", true)
 			//we have a match, add the rule to the list of rules applied to the current file...
 			rulesResultCurrent.rulesApplied = append(rulesResultCurrent.rulesApplied, rule)
 			rulesResultCurrent.allowed = rule.allowed
 		} else { //end if rule match the path...
-			addToReceipt("Rule does not match file", 4)
+			addToReceipt("Rule does not match file", true)
 		}
 	} //end rules for loop
 
@@ -157,11 +159,11 @@ func processRequestFile(filename string) {
 		allowedString = "NOT MONITORED"
 	}
 
-	addToReceipt("File matched by "+strconv.Itoa(len(rulesResultCurrent.rulesApplied))+" rules, the final result is "+allowedString, 2)
+	addToReceipt("File matched by "+strconv.Itoa(len(rulesResultCurrent.rulesApplied))+" rules, the final result is "+allowedString, true)
 
 	//add the processed file to the list of processed files...
 	rulesResults = append(rulesResults, rulesResultCurrent)
-	addToReceipt("-------------------------------", 4)
+	addToReceipt("-------------------------------", true)
 }
 
 func loadDummyPayload() (Request) {
@@ -184,7 +186,7 @@ func loadDummyPayloadFile() (Request) {
 			log.Fatal(err)
 		}
 		_ = json.Unmarshal(content, &request)
-		e("Dummy payload loaded")
+		addToReceipt("Dummy payload loaded", true)
 		return request
 	}
 	panic("DUMMY PAYLOAD FILE NOT FOUND")
@@ -198,7 +200,7 @@ func fileExists(file string) (bool) {
 }
 
 func loadConfig() (error) {
-	addToReceipt("Reading config file ["+configFileName+"]", 2)
+	addToReceipt("Reading config file ["+configFileName+"]", true)
 	var line string
 	var c int
 	var prefix string
@@ -212,9 +214,9 @@ func loadConfig() (error) {
 	for fileScanner.Scan() {
 		c++
 		line = fileScanner.Text()
-		addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", 6)
+		addToReceipt("Importing line  #"+strconv.Itoa(c)+"  ["+line+"]", true)
 		if len(line) < 3 {
-			addToReceipt("Line too short, considered empty. Skipped", 6)
+			addToReceipt("Line too short, considered empty. Skipped", true)
 			continue
 		}
 		prefix = line[0:3]
@@ -226,10 +228,10 @@ func loadConfig() (error) {
 			err = loadConfigRule(line, prefix == "OKK")
 			break
 		case "###", "///", "---":
-			addToReceipt("Line is a comment, skipped", 6)
+			addToReceipt("Line is a comment, skipped", true)
 			break
 		default:
-			addToReceipt("Prefix not valid, skipped", 6)
+			addToReceipt("Prefix not valid, skipped", true)
 		} //end switch
 		if err != nil {
 			return err
@@ -239,7 +241,7 @@ func loadConfig() (error) {
 	addToReceipt("Configuration file loaded: "+
 		strconv.Itoa(rulesOK)+ " OK rules, "+
 		strconv.Itoa(rulesKO)+ " KO rules, "+
-		strconv.Itoa(len(metadata))+ " metadata", 1)
+		strconv.Itoa(len(metadata))+ " metadata", true)
 	return nil
 }
 
@@ -258,35 +260,35 @@ func loadConfigRule(line string, isOKK bool) (error) {
 	}
 	rule.path = line
 	rules = append(rules, *rule)
-	addToReceipt("rule ["+rule.originalpath+"] is allowed ["+strconv.FormatBool(isOKK)+"]", 6)
+	addToReceipt("rule ["+rule.originalpath+"] is allowed ["+strconv.FormatBool(isOKK)+"]", true)
 	return nil
 }
 
 func loadConfigMetadata(line string) (error) {
 	index := strings.Index(line, "=")
 	if index < 0 {
-		addToReceipt("Unable to find [=] assignment in metadata element", 6)
+		addToReceipt("Unable to find [=] assignment in metadata element", true)
 		return errors.New("metadata line bad syntax, missing assignment operator")
 	}
 
 	key := strings.TrimSpace(line[:index])
 	value := strings.TrimSpace(line[index:])
 	if len(key) == 0 {
-		addToReceipt("unable to find key in metadata element", 6)
+		addToReceipt("unable to find key in metadata element", true)
 		return errors.New("metadata line bad syntax, key is empty")
 	}
 	if len(value) == 0 {
-		addToReceipt("unable to find value in metadata element", 6)
+		addToReceipt("unable to find value in metadata element", true)
 		return errors.New("metadata line bad syntax, value is empty")
 	}
-	addToReceipt("element ["+key+"] added to metadata with value ["+value+"]", 6)
+	addToReceipt("element ["+key+"] added to metadata with value ["+value+"]", true)
 	metadata[key] = value
 
 	//update known parameters...
-	if key == "verboselevel" {
+	if key == "verbosereceipt" {
 		valueToInt, _ := strconv.Atoi(value)
-		addToReceipt("updating receipt log level to "+strconv.Itoa(valueToInt), 2)
-		receiptLogLevel = valueToInt
+		addToReceipt("updating receipt log level to "+strconv.Itoa(valueToInt), true)
+		verboseReceipt = valueToInt
 	}
 
 	return nil
@@ -294,9 +296,9 @@ func loadConfigMetadata(line string) (error) {
 
 func greetings() {
 	if isAWS {
-		e("Hello Jeff")
+		addToReceipt("Hello Jeff", true)
 	} else {
-		e("Greetings Professor Falken")
+		addToReceipt("Greetings Professor Falken", true)
 	}
 }
 
@@ -308,14 +310,14 @@ func checkIfAWS() {
 	}
 }
 
-func addToReceipt(line string, verboseLevel int) {
+func addToReceipt(line string, verboseReceipt bool) {
 
-	if verboseLevel <= receiptLogLevel {
-		receiptRecord := new(Receipt)
-		receiptRecord.level = verboseLevel
-		receiptRecord.message = line
-		receipt = append(receipt, *receiptRecord)
-	}
+	receiptRecord := new(Receipt)
+	receiptRecord.verboseReceipt = verboseReceipt
+	receiptRecord.message = line
+	receiptRecord.dateTime = getTD()
+	receiptRecord.unixTime = int32(time.Now().Unix())
+	receipt = append(receipt, *receiptRecord)
 	e(line + "  [RECEIPT]")
 }
 

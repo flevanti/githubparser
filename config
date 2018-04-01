@@ -1,4 +1,5 @@
-MDTverboselevel=4
+MDTverbosereceipt=1
+MDTreceiptformat=json
 THIS IS A DUMMY FILE
 FOR THE MOMENT IS NOT USED..
 JUST READ
