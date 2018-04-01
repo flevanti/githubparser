@@ -76,7 +76,8 @@ func main() {
 	if isAWS {
 		lambda.Start(Handler)
 	} else {
-		request := loadDummyPayloadFile()
+		//printEnvVars()
+		request := loadDummyPayload()
 		response, err := Handler(request)
 		if err == nil {
 			fmt.Print(response + "\n")
@@ -109,6 +110,17 @@ func processRequest(request Request) (error) {
 	return nil
 }
 
+func loadDummyPayload() (Request) {
+	var content string
+	var request Request
+	content = os.Getenv("AWS_LAMBDA_EVENT_BODY")
+	if content == "" {
+		content = "{}"
+	}
+	_ = json.Unmarshal([]byte(content), &request)
+	return request
+}
+
 func loadDummyPayloadFile() (Request) {
 	if fileExists(dummyPayloadFileName) {
 		var request Request
@@ -117,7 +129,7 @@ func loadDummyPayloadFile() (Request) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = json.Unmarshal(content, &request)
+		_ = json.Unmarshal(content, &request)
 		e("Dummy payload loaded")
 		return request
 	}
@@ -259,4 +271,10 @@ func getTD() (string) {
 	// time date formatting...
 	// https://golang.org/src/time/format.go
 	return time.Now().Format("2006-01-02 15:04:05.0000")
+}
+
+func printEnvVars() {
+	for _, pair := range os.Environ() {
+		fmt.Println(pair)
+	}
 }
