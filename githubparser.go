@@ -28,7 +28,7 @@ var rulesResultsCountKO int
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
-var verboseReceipt = 0
+var verboseReceipt int
 var receipt []Receipt
 
 type Rule struct {
@@ -107,9 +107,20 @@ func sendSlack(message string) {
 }
 
 func Handler(request Request) (string, error) {
-	greetings()
+
 	//initialise
 	metadata = make(map[string]string)
+	rulesOK = 0
+	rulesKO = 0
+	rulesNA = 0
+	rulesResultsCountKO = 0
+	verboseReceipt = 0
+	receipt = []Receipt{}
+	rulesResults = []RuleResult{}
+	rules = []Rule{}
+
+	greetings()
+
 	//read .env variables
 	if err := godotenv.Load(); err != nil {
 		return "unable to read .env file", err
