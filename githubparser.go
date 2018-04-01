@@ -22,6 +22,7 @@ var rulesOK int
 var rulesKO int
 var rulesResultOK []RuleResult
 var rulesResultKO []RuleResult
+var rulesResultNA []RuleResult
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload"
@@ -110,9 +111,19 @@ func processRequest(request Request) (error) {
 		filesChanged = append(filesChanged, commit.Removed...)
 		e("Processing commit #" + strconv.Itoa(k) + "  " + commit.ID)
 		e(strconv.Itoa(len(filesChanged)) + " files to process")
+		for _, filename := range filesChanged {
+			processRequestFile(filename)
+		}
+
 	}
 
 	return nil
+}
+
+func processRequestFile(filename string) {
+	e("file " + filename)
+	filenameWithPrefix = projrootprefix + "/" + filename
+
 }
 
 func loadDummyPayload() (Request) {
