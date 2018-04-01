@@ -29,8 +29,9 @@ var receiptLogLevel = 4
 var receipt []Receipt
 
 type Rule struct {
-	allowed bool
-	path    string
+	allowed      bool
+	path         string
+	originalpath string
 }
 type Receipt struct {
 	level   int
@@ -101,6 +102,10 @@ func processRequest(request Request) (error) {
 	}
 
 	for k, commit := range request.Commits {
+		//we can merge only 2 elements.. se to merge 3 elements we need to do it twice
+		// example... elements A B C
+		// TOT = A+B (two elements)
+		// TOT = TOT + C (add the third element)
 		filesChanged := append(commit.Added, commit.Modified...)
 		filesChanged = append(filesChanged, commit.Removed...)
 		e("Processing commit #" + strconv.Itoa(k) + "  " + commit.ID)
@@ -197,12 +202,13 @@ func loadConfigRule(line string, isOKK bool) (error) {
 	}
 	rule := new(Rule)
 	rule.allowed = isOKK
+	rule.originalpath = line
 	if line[0:1] == "/" {
 		line = projrootprefix + line
 	}
 	rule.path = line
 	rules = append(rules, *rule)
-	addToReceipt("rule ["+line+"] is allowed ["+strconv.FormatBool(isOKK)+"]", 4)
+	addToReceipt("rule ["+rule.originalpath+"] is allowed ["+strconv.FormatBool(isOKK)+"]", 4)
 	return nil
 }
 
