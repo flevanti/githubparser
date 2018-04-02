@@ -22,7 +22,6 @@ var metadata map[string]string //we could add {} at the end to initialise the ma
 var rules []Rule
 var rulesOK int
 var rulesKO int
-var rulesNA int
 var rulesResults []RuleResult
 var rulesResultsCountKO int
 var projrootprefix = "[PROOT]"
@@ -76,6 +75,10 @@ type Request struct {
 		TreeID    string   `json:"tree_id"`
 		URL       string   `json:"url"`
 	} `json:"commits"`
+	Pusher struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	} `json:"pusher"`
 }
 
 func main() {
@@ -93,26 +96,12 @@ func main() {
 	}
 }
 
-func sendSlack(message string) {
-	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
-	err := hook.PostMessage(&slack.WebHookPostPayload{
-		Text:      message,
-		Channel:   os.Getenv("SLACK_CHANNEL"),
-		IconEmoji: os.Getenv("SLACK_EMOJI"),
-		Username:  os.Getenv("SLACK_USERNAME"),
-	})
-	if err != nil {
-		panic(err)
-	}
-}
-
 func Handler(request Request) (string, error) {
 
 	//initialise
 	metadata = make(map[string]string)
 	rulesOK = 0
 	rulesKO = 0
-	rulesNA = 0
 	rulesResultsCountKO = 0
 	verboseReceipt = 0
 	receipt = []Receipt{}
@@ -129,17 +118,46 @@ func Handler(request Request) (string, error) {
 		return "", err
 	}
 	processRequest(request)
-	sendReceipt()
+	sendReceipt(request.Pusher.Name, request.Pusher.Email)
 	return "", nil
 }
 
-func sendReceipt() {
+func sendSlack(message string, emoji string) {
+	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
+	err := hook.PostMessage(&slack.WebHookPostPayload{
+		Text:      message,
+		Channel:   os.Getenv("SLACK_CHANNEL"),
+		IconEmoji: emoji,
+		Username:  os.Getenv("SLACK_USERNAME"),
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func sendReceipt(pusherName string, pusherEmail string) {
 	var message string
+	var emoji string
+	emoji = os.Getenv("SLACK_EMOJI_OK")
+
 	message += "RECEIPT GENERATED " + getDT() + "\n\n"
 
 	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
 
-	sendSlack(message)
+	if rulesResultsCountKO > 0 {
+		emoji = os.Getenv("SLACK_EMOJI_KO")
+		for _, file := range rulesResults {
+			if file.allowed == 0 {
+				message += file.originalpath + "\n"
+			}
+		}
+	}
+
+	message += "\n\nPusher: " + pusherName + "   " + pusherEmail + "\n\n"
+
+	
+
+	sendSlack(message, emoji)
 }
 
 func processRequest(request Request) (error) {
