@@ -81,6 +81,9 @@ type Request struct {
 		Email string `json:"email"`
 		Name  string `json:"name"`
 	} `json:"pusher"`
+	Repository struct {
+		FullName string `json:"full_name"`
+	}
 }
 
 func main() {
@@ -119,7 +122,7 @@ func Handler(request Request) (string, error) {
 		return "", err
 	}
 	processRequest(request)
-	sendReceipt(request.Pusher.Name, request.Pusher.Email)
+	sendReceipt(request)
 	return "Process completed", nil
 }
 
@@ -301,7 +304,7 @@ func loadConfigMetadata(line string) (error) {
 	return nil
 }
 
-func sendReceipt(pusherName string, pusherEmail string) {
+func sendReceipt(request Request) {
 	var message string
 	var emoji string
 	emoji = os.Getenv("SLACK_EMOJI_OK")
@@ -310,6 +313,7 @@ func sendReceipt(pusherName string, pusherEmail string) {
 
 	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
 
+	message += "_Repository " + request.Repository.FullName + "_\n"
 	if rulesResultsCountKO > 0 {
 		emoji = os.Getenv("SLACK_EMOJI_KO")
 		for _, file := range rulesResults {
@@ -319,7 +323,7 @@ func sendReceipt(pusherName string, pusherEmail string) {
 		}
 	}
 
-	message += "\nPusher: " + pusherName + "   " + pusherEmail + "\n"
+	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
 	message += "_isLAMBDA " + strconv.FormatBool(isLAMBDA) +
 		"/isDOCKER " + strconv.FormatBool(isDOCKER) +
 		"/isPROD " + strconv.FormatBool(isPROD) +
