@@ -84,6 +84,7 @@ type Request struct {
 	Repository struct {
 		FullName string `json:"full_name"`
 	}
+	Ref string `json:"ref"`
 }
 
 func main() {
@@ -310,18 +311,17 @@ func sendReceipt(request Request) {
 	emoji = os.Getenv("SLACK_EMOJI_OK")
 
 	message += "RECEIPT GENERATED " + getDT() + "\n\n"
-
 	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
+	message += "_Repository " + request.Repository.FullName + "   (" + request.Ref + ")_\n"
 
-	message += "_Repository " + request.Repository.FullName + "_\n"
 	if rulesResultsCountKO > 0 {
 		emoji = os.Getenv("SLACK_EMOJI_KO")
 		for _, file := range rulesResults {
 			if file.allowed == 0 {
 				message += file.originalpath + "\n"
-			}
-		}
-	}
+			} //end if rule match is not allowed
+		} //end for each ruleResults
+	} // end if rulesKO >0
 
 	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
 	message += "_isLAMBDA " + strconv.FormatBool(isLAMBDA) +
