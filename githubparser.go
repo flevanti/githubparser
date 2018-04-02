@@ -13,11 +13,13 @@ import (
 	"errors"
 	"io/ioutil"
 	"log"
-	"github.com/bluele/slack"
 	"github.com/joho/godotenv"
+	"github.com/bluele/slack"
 )
 
-var isAWS bool
+var isLAMBDA bool
+var isDOCKER bool
+var isPROD bool
 var metadata map[string]string //we could add {} at the end to initialise the map...
 var rules []Rule
 var rulesOK int
@@ -82,8 +84,8 @@ type Request struct {
 }
 
 func main() {
-	checkIfAWS()
-	if isAWS {
+	checkIfLambda()
+	if isLAMBDA {
 		lambda.Start(Handler)
 	} else {
 		//printEnvVars()
@@ -97,7 +99,6 @@ func main() {
 }
 
 func Handler(request Request) (string, error) {
-
 	//initialise
 	metadata = make(map[string]string)
 	rulesOK = 0
@@ -119,45 +120,7 @@ func Handler(request Request) (string, error) {
 	}
 	processRequest(request)
 	sendReceipt(request.Pusher.Name, request.Pusher.Email)
-	return "", nil
-}
-
-func sendSlack(message string, emoji string) {
-	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
-	err := hook.PostMessage(&slack.WebHookPostPayload{
-		Text:      message,
-		Channel:   os.Getenv("SLACK_CHANNEL"),
-		IconEmoji: emoji,
-		Username:  os.Getenv("SLACK_USERNAME"),
-	})
-	if err != nil {
-		panic(err)
-	}
-}
-
-func sendReceipt(pusherName string, pusherEmail string) {
-	var message string
-	var emoji string
-	emoji = os.Getenv("SLACK_EMOJI_OK")
-
-	message += "RECEIPT GENERATED " + getDT() + "\n\n"
-
-	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
-
-	if rulesResultsCountKO > 0 {
-		emoji = os.Getenv("SLACK_EMOJI_KO")
-		for _, file := range rulesResults {
-			if file.allowed == 0 {
-				message += file.originalpath + "\n"
-			}
-		}
-	}
-
-	message += "\n\nPusher: " + pusherName + "   " + pusherEmail + "\n\n"
-
-	
-
-	sendSlack(message, emoji)
+	return "Process completed", nil
 }
 
 func processRequest(request Request) (error) {
@@ -338,20 +301,82 @@ func loadConfigMetadata(line string) (error) {
 	return nil
 }
 
+func sendReceipt(pusherName string, pusherEmail string) {
+	var message string
+	var emoji string
+	emoji = os.Getenv("SLACK_EMOJI_OK")
+
+	message += "RECEIPT GENERATED " + getDT() + "\n\n"
+
+	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
+
+	if rulesResultsCountKO > 0 {
+		emoji = os.Getenv("SLACK_EMOJI_KO")
+		for _, file := range rulesResults {
+			if file.allowed == 0 {
+				message += file.originalpath + "\n"
+			}
+		}
+	}
+
+	message += "\nPusher: " + pusherName + "   " + pusherEmail + "\n"
+	message += "_isLAMBDA " + strconv.FormatBool(isLAMBDA) +
+		"/isDOCKER " + strconv.FormatBool(isDOCKER) +
+		"/isPROD " + strconv.FormatBool(isPROD) +
+		"/fn " + os.Getenv("AWS_LAMBDA_FUNCTION_NAME") +
+		"/v " + os.Getenv("AWS_LAMBDA_FUNCTION_VERSION") + "_\n"
+
+	sendSlack(message, emoji)
+}
+
+func sendSlack(message string, emoji string) {
+	var channel string
+	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
+	if isPROD {
+		channel = os.Getenv("SLACK_CHANNEL_PROD")
+	} else {
+		channel = os.Getenv("SLACK_CHANNEL_DEV")
+	}
+
+	//generate a unique number to be sure slack always shows the sender...
+	//this is really NOT needed
+	uniqueSenderToken := " [" + strconv.Itoa(time.Now().Nanosecond()/1000000) + "]"
+
+	err := hook.PostMessage(&slack.WebHookPostPayload{
+		Text:      message,
+		Channel:   channel,
+		IconEmoji: emoji,
+		Username:  os.Getenv("SLACK_USERNAME") + uniqueSenderToken,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func greetings() {
-	if isAWS {
+	if isLAMBDA {
 		addToReceipt("Hello Jeff", true)
 	} else {
 		addToReceipt("Greetings Professor Falken", true)
 	}
 }
 
-func checkIfAWS() {
+func checkIfLambda() {
+	//default value
+	isLAMBDA = false
+	isDOCKER = false
+	isPROD = false
 	if len(os.Getenv("AWS_REGION")) != 0 {
-		isAWS = true
-	} else {
-		isAWS = false
+		isLAMBDA = true
 	}
+	//even if we are in an AWS/LAMBDA environment, it could be a docker container...
+	//so let's use another env var to understand if docker
+	if os.Getenv("AWS_ACCESS_KEY") == "SOME_ACCESS_KEY_ID" {
+		isDOCKER = true
+	}
+	//if LAMBDA and not docker.... this is PROD!!!!
+	isPROD = isLAMBDA && !isDOCKER
+
 }
 
 func addToReceipt(line string, verboseReceipt bool) {
@@ -376,9 +401,11 @@ func getDT() (string) {
 }
 
 func printEnvVars() {
+	e("ENVIRONMENT VARIABLES:")
 	for _, pair := range os.Environ() {
-		fmt.Println(pair)
+		e(pair)
 	}
+
 }
 
 func loadDummyPayloadFile() (Request) {
