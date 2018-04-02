@@ -264,7 +264,7 @@ func loadConfig() (error) {
 }
 
 func loadConfigRule(line string, isOKK bool) (error) {
-	rule := new(Rule)
+	rule := Rule{}
 	if isOKK {
 		rulesOK++
 		rule.allowed = 1
@@ -277,7 +277,7 @@ func loadConfigRule(line string, isOKK bool) (error) {
 		line = projrootprefix + line
 	}
 	rule.path = line
-	rules = append(rules, *rule)
+	rules = append(rules, rule)
 	addToReceipt("rule ["+rule.originalpath+"] is allowed ["+strconv.FormatBool(isOKK)+"]", true)
 	return nil
 }
@@ -403,12 +403,12 @@ func checkIfLive(repo string, refs string) {
 
 func addToReceipt(line string, OnlyForVerboseReceipt bool) {
 
-	receiptRecord := new(Receipt)
+	receiptRecord := Receipt{}
 	receiptRecord.verboseReceipt = OnlyForVerboseReceipt
 	receiptRecord.message = line
 	receiptRecord.dateTime = getDT()
 	receiptRecord.unixTime = int32(time.Now().Unix())
-	receipt = append(receipt, *receiptRecord)
+	receipt = append(receipt, receiptRecord)
 	e(line + "  [RECEIPT]")
 }
 
