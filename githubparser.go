@@ -20,6 +20,7 @@ import (
 var isLAMBDA bool
 var isDOCKER bool
 var isPROD bool
+var isLIVE bool
 var metadata map[string]string //we could add {} at the end to initialise the map...
 var rules []Rule
 var rulesOK int
@@ -88,7 +89,7 @@ type Request struct {
 }
 
 func main() {
-	checkIfLambda()
+	checkIfProd()
 	if isLAMBDA {
 		lambda.Start(Handler)
 	} else {
@@ -107,7 +108,8 @@ func Handler(request Request) (string, error) {
 	if len(request.Commits) == 0 {
 		return "NO COMMITS FOUND!", nil
 	}
-	
+	checkIfLive(request.Repository.FullName, request.Ref)
+	addToReceipt(fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isPROD [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isPROD, isLIVE), true)
 	//initialise
 	metadata = make(map[string]string)
 	rulesOK = 0
@@ -332,6 +334,7 @@ func sendReceipt(request Request) {
 	message += "_isLAMBDA " + strconv.FormatBool(isLAMBDA) +
 		"/isDOCKER " + strconv.FormatBool(isDOCKER) +
 		"/isPROD " + strconv.FormatBool(isPROD) +
+		"/isLIVE " + strconv.FormatBool(isLIVE) +
 		"/fn " + os.Getenv("AWS_LAMBDA_FUNCTION_NAME") +
 		"/v " + os.Getenv("AWS_LAMBDA_FUNCTION_VERSION") + "_\n"
 
@@ -341,8 +344,8 @@ func sendReceipt(request Request) {
 func sendSlack(message string, emoji string) {
 	var channel string
 	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
-	if isPROD {
-		channel = os.Getenv("SLACK_CHANNEL_PROD")
+	if isLIVE {
+		channel = os.Getenv("SLACK_CHANNEL_LIVE")
 	} else {
 		channel = os.Getenv("SLACK_CHANNEL_DEV")
 	}
@@ -370,11 +373,12 @@ func greetings() {
 	}
 }
 
-func checkIfLambda() {
+func checkIfProd() {
 	//default value
 	isLAMBDA = false
 	isDOCKER = false
 	isPROD = false
+	isLIVE = false
 	if len(os.Getenv("AWS_REGION")) != 0 {
 		isLAMBDA = true
 	}
@@ -383,15 +387,24 @@ func checkIfLambda() {
 	if os.Getenv("AWS_ACCESS_KEY") == "SOME_ACCESS_KEY_ID" {
 		isDOCKER = true
 	}
-	//if LAMBDA and not docker.... this is PROD!!!!
+	//Try to understand if this is a PROD environment
 	isPROD = isLAMBDA && !isDOCKER
 
 }
 
-func addToReceipt(line string, verboseReceipt bool) {
+func checkIfLive(repo string, refs string) {
+	//Try to understand if this is the LIVE environment
+	isLIVE = isPROD &&
+		os.Getenv("GITHUB_REPO_LIVE") != "" &&
+		repo == os.Getenv("GITHUB_REPO_LIVE") &&
+		os.Getenv("GITHUB_REFS_LIVE") != "" &&
+		refs == os.Getenv("GITHUB_REFS_LIVE")
+}
+
+func addToReceipt(line string, OnlyForVerboseReceipt bool) {
 
 	receiptRecord := new(Receipt)
-	receiptRecord.verboseReceipt = verboseReceipt
+	receiptRecord.verboseReceipt = OnlyForVerboseReceipt
 	receiptRecord.message = line
 	receiptRecord.dateTime = getDT()
 	receiptRecord.unixTime = int32(time.Now().Unix())
