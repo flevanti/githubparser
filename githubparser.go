@@ -103,6 +103,11 @@ func main() {
 }
 
 func Handler(request Request) (string, error) {
+	//no need to waste time/resources if no commits....
+	if len(request.Commits) == 0 {
+		return "NO COMMITS FOUND!", nil
+	}
+	
 	//initialise
 	metadata = make(map[string]string)
 	rulesOK = 0
