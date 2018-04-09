@@ -29,7 +29,7 @@ var rulesResults []RuleResult
 var rulesResultsCountKO int
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
-var dummyPayloadFileName = "payload"
+var dummyPayloadFileName = "payload_big.json"
 var verboseReceipt int
 var receipt []Receipt
 
@@ -99,38 +99,47 @@ func main() {
 		if err == nil {
 			fmt.Print(response + "\n")
 		}
-
 	}
 }
 
 func Handler(request Request) (string, error) {
+	checkIfLive(request.Repository.FullName, request.Ref)
+
+	if isLAMBDA && isDOCKER && !isPROD {
+		request = loadDummyPayload()
+	}
+
 	//no need to waste time/resources if no commits....
 	if len(request.Commits) == 0 {
 		return "NO COMMITS FOUND!", nil
+	} else {
+		
+		//initialise
+		metadata = make(map[string]string)
+		rulesOK = 0
+		rulesKO = 0
+		rulesResultsCountKO = 0
+		verboseReceipt = 0
+		receipt = []Receipt{}
+		rulesResults = []RuleResult{}
+		rules = []Rule{}
+
+		greetings()
+
+		//read .env variables
+		if err := godotenv.Load(); err != nil {
+			return "unable to read .env file", err
+		}
+		if err := loadConfig(); err != nil {
+			return "", err
+		}
+		processRequest(request)
+		sendReceipt(request)
+
 	}
-	checkIfLive(request.Repository.FullName, request.Ref)
+
 	addToReceipt(fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isPROD [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isPROD, isLIVE), true)
-	//initialise
-	metadata = make(map[string]string)
-	rulesOK = 0
-	rulesKO = 0
-	rulesResultsCountKO = 0
-	verboseReceipt = 0
-	receipt = []Receipt{}
-	rulesResults = []RuleResult{}
-	rules = []Rule{}
 
-	greetings()
-
-	//read .env variables
-	if err := godotenv.Load(); err != nil {
-		return "unable to read .env file", err
-	}
-	if err := loadConfig(); err != nil {
-		return "", err
-	}
-	processRequest(request)
-	sendReceipt(request)
 	return "Process completed", nil
 }
 
@@ -202,7 +211,7 @@ func loadDummyPayload() (Request) {
 	var request Request
 	content = os.Getenv("AWS_LAMBDA_EVENT_BODY")
 	if content == "" {
-		content = "{}"
+		content = loadDummyPayloadFile()
 	}
 	_ = json.Unmarshal([]byte(content), &request)
 	return request
@@ -430,17 +439,16 @@ func printEnvVars() {
 
 }
 
-func loadDummyPayloadFile() (Request) {
+func loadDummyPayloadFile() (string) {
 	if fileExists(dummyPayloadFileName) {
-		var request Request
 
 		content, err := ioutil.ReadFile(dummyPayloadFileName)
 		if err != nil {
 			log.Fatal(err)
 		}
-		_ = json.Unmarshal(content, &request)
+		//_ = json.Unmarshal(content, &request)
 		addToReceipt("Dummy payload loaded", true)
-		return request
+		return string(content)
 	}
-	panic("DUMMY PAYLOAD FILE NOT FOUND")
+	return "{}"
 }
