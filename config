@@ -9,7 +9,7 @@ OKK scripts
 OKK /sites/all/scripts/
 KOO /sites/all/scripts/maintenance
 KOO fake
-
- 
-
+KOO /src/mongo
+OKK /src/mongo/installer
+OKK /src/mongo/util
 
