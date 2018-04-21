@@ -17,10 +17,11 @@ import (
 	"github.com/bluele/slack"
 )
 
-var isLAMBDA bool
-var isDOCKER bool
-var isPROD bool
-var isLIVE bool
+var isLAMBDA bool //running using lambda function (dev or aws)
+var isDOCKER bool //running in docker (so this is probably a lambda function)
+var isAWS bool    //running in AWS
+var isLIVE bool   //dealing with live repository
+
 var metadata map[string]string //we could add {} at the end to initialise the map...
 var rules []Rule
 var rulesOK int
@@ -94,10 +95,10 @@ func main() {
 		lambda.Start(Handler)
 	} else {
 		//printEnvVars()
-		request := loadDummyPayload()
-		response, err := Handler(request)
-		if err == nil {
-			fmt.Print(response + "\n")
+		response, err := Handler(Request{})
+		e(response)
+		if err != nil {
+			e(err.Error())
 		}
 	}
 }
@@ -105,7 +106,7 @@ func main() {
 func Handler(request Request) (string, error) {
 	checkIfLive(request.Repository.FullName, request.Ref)
 
-	if isLAMBDA && isDOCKER && !isPROD {
+	if !isAWS {
 		request = loadDummyPayload()
 	}
 
@@ -113,7 +114,7 @@ func Handler(request Request) (string, error) {
 	if len(request.Commits) == 0 {
 		return "NO COMMITS FOUND!", nil
 	} else {
-		
+
 		//initialise
 		metadata = make(map[string]string)
 		rulesOK = 0
@@ -138,7 +139,7 @@ func Handler(request Request) (string, error) {
 
 	}
 
-	addToReceipt(fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isPROD [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isPROD, isLIVE), true)
+	addToReceipt(fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isAWS [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isAWS, isLIVE), true)
 
 	return "Process completed", nil
 }
@@ -342,7 +343,7 @@ func sendReceipt(request Request) {
 	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
 	message += "_isLAMBDA " + strconv.FormatBool(isLAMBDA) +
 		"/isDOCKER " + strconv.FormatBool(isDOCKER) +
-		"/isPROD " + strconv.FormatBool(isPROD) +
+		"/isAWS " + strconv.FormatBool(isAWS) +
 		"/isLIVE " + strconv.FormatBool(isLIVE) +
 		"/fn " + os.Getenv("AWS_LAMBDA_FUNCTION_NAME") +
 		"/v " + os.Getenv("AWS_LAMBDA_FUNCTION_VERSION") + "_\n"
@@ -386,7 +387,7 @@ func checkIfProd() {
 	//default value
 	isLAMBDA = false
 	isDOCKER = false
-	isPROD = false
+	isAWS = false
 	isLIVE = false
 	if len(os.Getenv("AWS_REGION")) != 0 {
 		isLAMBDA = true
@@ -397,13 +398,13 @@ func checkIfProd() {
 		isDOCKER = true
 	}
 	//Try to understand if this is a PROD environment
-	isPROD = isLAMBDA && !isDOCKER
+	isAWS = isLAMBDA && !isDOCKER
 
 }
 
 func checkIfLive(repo string, refs string) {
-	//Try to understand if this is the LIVE environment
-	isLIVE = isPROD &&
+	//Try to understand if we are processing the live repository
+	isLIVE = isAWS &&
 		os.Getenv("GITHUB_REPO_LIVE") != "" &&
 		repo == os.Getenv("GITHUB_REPO_LIVE") &&
 		os.Getenv("GITHUB_REFS_LIVE") != "" &&
