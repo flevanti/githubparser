@@ -89,8 +89,18 @@ type Request struct {
 	Ref string `json:"ref"`
 }
 
+/**
+There're mainly 3 ways this script can be run....
+- running the go app directly on local machine
+- running it using a local lambda function (thanks to docker & lambci/lambda )
+- running on AWS as a lambda function
+
+based on the way we are running it the request payload can be obtained in different ways
+
+ */
+
 func main() {
-	checkIfProd()
+	checkEnvContext()
 	if isLAMBDA {
 		lambda.Start(Handler)
 	} else {
@@ -104,11 +114,12 @@ func main() {
 }
 
 func Handler(request Request) (string, error) {
-	checkIfLive(request.Repository.FullName, request.Ref)
 
 	if !isAWS {
-		request = loadDummyPayload()
+		request = LoadDummyPayload()
 	}
+
+	checkIfLiveRepo(request.Repository.FullName, request.Ref)
 
 	//no need to waste time/resources if no commits....
 	if len(request.Commits) == 0 {
@@ -207,11 +218,13 @@ func processRequestFile(filename string) {
 	addToReceipt("-------------------------------", true)
 }
 
-func loadDummyPayload() (Request) {
+func LoadDummyPayload() (Request) {
 	var content string
 	var request Request
+	// look for payload in an env variable....
 	content = os.Getenv("AWS_LAMBDA_EVENT_BODY")
 	if content == "" {
+		//if payload is not found try to use a file content
 		content = loadDummyPayloadFile()
 	}
 	_ = json.Unmarshal([]byte(content), &request)
@@ -328,7 +341,7 @@ func sendReceipt(request Request) {
 	emoji = os.Getenv("SLACK_EMOJI_OK")
 
 	message += "RECEIPT GENERATED " + getDT() + "\n\n"
-	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FOLDERS*\n\n"
+	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FILES/FOLDERS*\n\n"
 	message += "_Repository " + request.Repository.FullName + "   (" + request.Ref + ")_\n"
 
 	if rulesResultsCountKO > 0 {
@@ -383,7 +396,7 @@ func greetings() {
 	}
 }
 
-func checkIfProd() {
+func checkEnvContext() {
 	//default value
 	isLAMBDA = false
 	isDOCKER = false
@@ -394,15 +407,16 @@ func checkIfProd() {
 	}
 	//even if we are in an AWS/LAMBDA environment, it could be a docker container...
 	//so let's use another env var to understand if docker
+	//"SOME_ACCESS_KEY_ID" is the default value assigned to the env var by the docker container.... (check lambci/lambda)
 	if os.Getenv("AWS_ACCESS_KEY") == "SOME_ACCESS_KEY_ID" {
 		isDOCKER = true
 	}
-	//Try to understand if this is a PROD environment
+	//Try to understand if we are running in AWS
 	isAWS = isLAMBDA && !isDOCKER
 
 }
 
-func checkIfLive(repo string, refs string) {
+func checkIfLiveRepo(repo string, refs string) {
 	//Try to understand if we are processing the live repository
 	isLIVE = isAWS &&
 		os.Getenv("GITHUB_REPO_LIVE") != "" &&
@@ -441,15 +455,15 @@ func printEnvVars() {
 }
 
 func loadDummyPayloadFile() (string) {
+	var content []byte
+	var err error
 	if fileExists(dummyPayloadFileName) {
-
-		content, err := ioutil.ReadFile(dummyPayloadFileName)
+		content, err = ioutil.ReadFile(dummyPayloadFileName)
 		if err != nil {
 			log.Fatal(err)
+			return "{}"
 		}
-		//_ = json.Unmarshal(content, &request)
-		addToReceipt("Dummy payload loaded", true)
-		return string(content)
 	}
-	return "{}"
+	addToReceipt("Dummy payload loaded", true)
+	return string(content)
 }
