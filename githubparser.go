@@ -104,7 +104,6 @@ func main() {
 	if isLAMBDA {
 		lambda.Start(Handler)
 	} else {
-		//printEnvVars()
 		response, err := Handler(Request{})
 		e(response)
 		if err != nil {
@@ -114,7 +113,8 @@ func main() {
 }
 
 func Handler(request Request) (string, error) {
-
+	e(getLocalEnvSituationString())
+	printEnvVars()
 	if !isAWS {
 		request = LoadDummyPayload()
 	}
@@ -149,10 +149,13 @@ func Handler(request Request) (string, error) {
 		sendReceipt(request)
 
 	}
-
-	addToReceipt(fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isAWS [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isAWS, isLIVE), true)
-
+	addToReceipt(getLocalEnvSituationString(), true)
 	return "Process completed", nil
+}
+
+func getLocalEnvSituationString() string {
+	return fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isAWS [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isAWS, isLIVE)
+
 }
 
 func processRequest(request Request) (error) {
@@ -354,12 +357,7 @@ func sendReceipt(request Request) {
 	} // end if rulesKO >0
 
 	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
-	message += "_isLAMBDA " + strconv.FormatBool(isLAMBDA) +
-		"/isDOCKER " + strconv.FormatBool(isDOCKER) +
-		"/isAWS " + strconv.FormatBool(isAWS) +
-		"/isLIVE " + strconv.FormatBool(isLIVE) +
-		"/fn " + os.Getenv("AWS_LAMBDA_FUNCTION_NAME") +
-		"/v " + os.Getenv("AWS_LAMBDA_FUNCTION_VERSION") + "_\n"
+	message += "_" + getLocalEnvSituationString() + "_\n"
 
 	sendSlack(message, emoji)
 }
@@ -407,8 +405,8 @@ func checkEnvContext() {
 	}
 	//even if we are in an AWS/LAMBDA environment, it could be a docker container...
 	//so let's use another env var to understand if docker
-	//"SOME_ACCESS_KEY_ID" is the default value assigned to the env var by the docker container.... (check lambci/lambda)
-	if os.Getenv("AWS_ACCESS_KEY") == "SOME_ACCESS_KEY_ID" {
+	//after comparing docker lambda and AWS lambda I noticed that AWS_SESSION_TOKEN env var is (for the moment) only available in AWS
+	if len(os.Getenv("AWS_SESSION_TOKEN")) == 0 {
 		isDOCKER = true
 	}
 	//Try to understand if we are running in AWS
