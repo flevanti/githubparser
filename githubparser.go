@@ -30,7 +30,7 @@ var rulesResults []RuleResult
 var rulesResultsCountKO int
 var projrootprefix = "[PROOT]"
 var configFileName = "config"
-var dummyPayloadFileName = "payload_big.json"
+var dummyPayloadFileName = "payload.json"
 var verboseReceipt int
 var receipt []Receipt
 
@@ -174,6 +174,7 @@ func processRequest(request Request) (error) {
 		addToReceipt(strconv.Itoa(len(filesChanged))+" files to process", true)
 		//loop through files changed....
 		for _, filename := range filesChanged {
+			//TODO implement concurrency....
 			processRequestFile(filename)
 		} //end fileschanged for loop
 		addToReceipt("-------------------------------", true)
@@ -406,7 +407,7 @@ func checkEnvContext() {
 	//even if we are in an AWS/LAMBDA environment, it could be a docker container...
 	//so let's use another env var to understand if docker
 	//after comparing docker lambda and AWS lambda I noticed that AWS_SESSION_TOKEN env var is (for the moment) only available in AWS
-	if len(os.Getenv("AWS_SESSION_TOKEN")) == 0 {
+	if isLAMBDA && len(os.Getenv("AWS_SESSION_TOKEN")) == 0 {
 		isDOCKER = true
 	}
 	//Try to understand if we are running in AWS
