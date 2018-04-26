@@ -15,6 +15,7 @@ import (
 	"log"
 	"github.com/joho/godotenv"
 	"github.com/bluele/slack"
+	"sync"
 )
 
 var isLAMBDA bool //running using lambda function (dev or aws)
@@ -161,6 +162,14 @@ func getLocalEnvSituationString() string {
 func processRequest(request Request) (error) {
 	addToReceipt(strconv.Itoa(len(request.Commits))+" commits found in the payload", true)
 
+	// implementing concurrency with a _primitive_ waitgroup.
+	// we tested the script with a commit with 6000 files changed and
+	// the impact on memory was still acceptable (75~95MB)
+	// compared to time consumed.
+	// AWS lambda min memory size is 128MB so makes sense to try to use it as much as possible and try to lower the time.
+	// If this method fails, we will implement a buffered channel
+	var wg sync.WaitGroup
+
 	//loop through commits....
 	for k, commit := range request.Commits {
 		// merge all changed (new/updated/removed) files into one element
@@ -174,16 +183,23 @@ func processRequest(request Request) (error) {
 		addToReceipt(strconv.Itoa(len(filesChanged))+" files to process", true)
 		//loop through files changed....
 		for _, filename := range filesChanged {
-			//TODO implement concurrency....
-			processRequestFile(filename)
+			wg.Add(1)
+			processRequestFile(filename, &wg)
 		} //end fileschanged for loop
 		addToReceipt("-------------------------------", true)
 	} //end for each commit loop
-
+	e("Waiting for all requests to be completed...")
+	timeWaitedStart := time.Now()
+	wg.Wait()
+	timeWaited := time.Since(timeWaitedStart)
+	e(fmt.Sprintf("Time spent waiting %.2f ms", float32(timeWaited.Nanoseconds())/1000))
 	return nil
 }
 
-func processRequestFile(filename string) {
+func processRequestFile(filename string, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
 	var rulesResultCurrent RuleResult
 	var allowedString string
 
@@ -432,7 +448,7 @@ func addToReceipt(line string, OnlyForVerboseReceipt bool) {
 	receiptRecord.dateTime = getDT()
 	receiptRecord.unixTime = int32(time.Now().Unix())
 	receipt = append(receipt, receiptRecord)
-	e(line + "  [RECEIPT]")
+	//e(line + "  [RECEIPT]")
 }
 
 func e(line string) {
