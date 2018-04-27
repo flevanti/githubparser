@@ -1,6 +1,6 @@
 TO RUN LAMBDA USING DOCKER
-
-docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x my_handler '{"some": "event"}'
+THE SCRIPT WILL LOAD THE PAYLOAD FROM FILE>>>>>PAYLOAD PASSED AS PARAMETER IS IGNORED
+docker run --rm -v "$PWD":/var/task lambci/lambda:go1.x githubparser '{"some": "event"}'
 
 
 BUILD DOCKER FILE AND RUN IT... (json string is an example...)
