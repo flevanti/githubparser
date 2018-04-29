@@ -21,7 +21,6 @@ import (
 var isLAMBDA bool //running using lambda function (dev or aws)
 var isDOCKER bool //running in docker (so this is probably a lambda function)
 var isAWS bool    //running in AWS
-var isLIVE bool   //dealing with live repository
 
 var metadata map[string]string //we could add {} at the end to initialise the map...
 var rules []Rule
@@ -120,8 +119,6 @@ func Handler(request Request) (string, error) {
 		request = LoadDummyPayload()
 	}
 
-	checkIfLiveRepo(request.Repository.FullName, request.Ref)
-
 	//no need to waste time/resources if no commits....
 	if len(request.Commits) == 0 {
 		return "NO COMMITS FOUND!", nil
@@ -155,7 +152,7 @@ func Handler(request Request) (string, error) {
 }
 
 func getLocalEnvSituationString() string {
-	return fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isAWS [%t]  isLIVE [%t]", isLAMBDA, isDOCKER, isAWS, isLIVE)
+	return fmt.Sprintf("isLAMBDA [%t]  isDOCKER [%t]  isAWS [%t]", isLAMBDA, isDOCKER, isAWS)
 
 }
 
@@ -283,15 +280,15 @@ func loadConfig() (error) {
 		prefix = line[0:3]
 		line = strings.TrimSpace(line[3:])
 		switch prefix {
-		case "MDT":
+		case "MDT", "MTD": // metadata
 			err = loadConfigMetadata(line)
-		case "OKK", "KOO":
+		case "OKK", "KOO": // actual rule
 			err = loadConfigRule(line, prefix == "OKK")
 			break
-		case "###", "///", "---":
+		case "###", "///", "---": // comments
 			addToReceipt("Line is a comment, skipped", true)
 			break
-		default:
+		default: // unknown
 			addToReceipt("Prefix not valid, skipped", true)
 		} //end switch
 		if err != nil {
@@ -357,32 +354,48 @@ func loadConfigMetadata(line string) (error) {
 
 func sendReceipt(request Request) {
 	var message string
-	var emoji string
-	emoji = os.Getenv("SLACK_EMOJI_OK")
 
+	if verboseReceipt == 1 {
+		message += "VERBOSE "
+	}
 	message += "RECEIPT GENERATED " + getDT() + "\n\n"
 	message += "*" + strconv.Itoa(rulesResultsCountKO) + " FILES MATCHED PROTECTED FILES/FOLDERS*\n\n"
 	message += "_Repository " + request.Repository.FullName + "   (" + request.Ref + ")_\n"
 
-	if rulesResultsCountKO > 0 {
-		emoji = os.Getenv("SLACK_EMOJI_KO")
-		for _, file := range rulesResults {
+	for _, file := range rulesResults {
+		if verboseReceipt == 0 {
 			if file.allowed == 0 {
 				message += file.originalpath + "\n"
-			} //end if rule match is not allowed
-		} //end for each ruleResults
-	} // end if rulesKO >0
+			}
+		} else {
+			if file.allowed == 0 {
+				message += "* "
+			} else {
+				message += " "
+			}
+			message += file.originalpath + "\n"
+
+		}
+	} //end for each ruleResults
 
 	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
 	message += "_" + getLocalEnvSituationString() + "_\n"
 
-	sendSlack(message, emoji)
+	sendSlack(message, rulesResultsCountKO == 0)
 }
 
-func sendSlack(message string, emoji string) {
+func sendSlack(message string, ok_flag bool) {
 	var channel string
+	var emoji string
+
+	if ok_flag {
+		emoji = os.Getenv("SLACK_EMOJI_OK")
+	} else {
+		emoji = os.Getenv("SLACK_EMOJI_KO")
+	}
+
 	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
-	if isLIVE {
+	if isAWS {
 		channel = os.Getenv("SLACK_CHANNEL_LIVE")
 	} else {
 		channel = os.Getenv("SLACK_CHANNEL_DEV")
@@ -416,7 +429,6 @@ func checkEnvContext() {
 	isLAMBDA = false
 	isDOCKER = false
 	isAWS = false
-	isLIVE = false
 	if len(os.Getenv("AWS_REGION")) != 0 {
 		isLAMBDA = true
 	}
@@ -429,15 +441,6 @@ func checkEnvContext() {
 	//Try to understand if we are running in AWS
 	isAWS = isLAMBDA && !isDOCKER
 
-}
-
-func checkIfLiveRepo(repo string, refs string) {
-	//Try to understand if we are processing the live repository
-	isLIVE = isAWS &&
-		os.Getenv("GITHUB_REPO_LIVE") != "" &&
-		repo == os.Getenv("GITHUB_REPO_LIVE") &&
-		os.Getenv("GITHUB_REFS_LIVE") != "" &&
-		refs == os.Getenv("GITHUB_REFS_LIVE")
 }
 
 func addToReceipt(line string, OnlyForVerboseReceipt bool) {
