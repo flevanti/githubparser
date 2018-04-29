@@ -354,6 +354,7 @@ func loadConfigMetadata(line string) (error) {
 
 func sendReceipt(request Request) {
 	var message string
+	var filesList string
 
 	if verboseReceipt == 1 {
 		message += "VERBOSE "
@@ -365,15 +366,15 @@ func sendReceipt(request Request) {
 	for _, file := range rulesResults {
 		if verboseReceipt == 0 {
 			if file.allowed == 0 {
-				message += file.originalpath + "\n"
+				filesList += file.originalpath + "\n"
 			}
 		} else {
 			if file.allowed == 0 {
-				message += "* "
+				filesList += "* "
 			} else {
-				message += " "
+				filesList += "  "
 			}
-			message += file.originalpath + "\n"
+			filesList += file.originalpath + "\n"
 
 		}
 	} //end for each ruleResults
@@ -381,14 +382,20 @@ func sendReceipt(request Request) {
 	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
 	message += "_" + getLocalEnvSituationString() + "_\n"
 
-	sendSlack(message, rulesResultsCountKO == 0)
+	sendSlack(message, filesList, rulesResultsCountKO == 0)
 }
 
-func sendSlack(message string, ok_flag bool) {
+func sendSlack(message string, filesList string, okFlag bool) {
 	var channel string
 	var emoji string
+	var attachmentTitle string
+	var attachmentColor string
+	if filesList != "" {
+		attachmentTitle = "FILES LIST"
+		attachmentColor = "#FF0000"
+	}
 
-	if ok_flag {
+	if okFlag {
 		emoji = os.Getenv("SLACK_EMOJI_OK")
 	} else {
 		emoji = os.Getenv("SLACK_EMOJI_KO")
@@ -404,13 +411,21 @@ func sendSlack(message string, ok_flag bool) {
 	//generate a unique number to be sure slack always shows the sender...
 	//this is really NOT needed
 	uniqueSenderToken := " [" + strconv.Itoa(time.Now().Nanosecond()/1000000) + "]"
-
+	//create the attachment
+	//slack attachments have a characters limit but I think it is more than sufficient to list errors if any.
+	//for the moment this is ok, we may want to change this in the future but for the moment is ok
+	attachment := []*slack.Attachment{
+		{Text: filesList, Title: attachmentTitle, Color: attachmentColor},
+	}
 	err := hook.PostMessage(&slack.WebHookPostPayload{
-		Text:      message,
-		Channel:   channel,
-		IconEmoji: emoji,
-		Username:  os.Getenv("SLACK_USERNAME") + uniqueSenderToken,
-	})
+		Text:        message,
+		Channel:     channel,
+		IconEmoji:   emoji,
+		Username:    os.Getenv("SLACK_USERNAME") + uniqueSenderToken,
+		Attachments: attachment,
+	}, //end payload
+	) //end post message
+
 	if err != nil {
 		panic(err)
 	}
@@ -451,7 +466,7 @@ func addToReceipt(line string, OnlyForVerboseReceipt bool) {
 	receiptRecord.dateTime = getDT()
 	receiptRecord.unixTime = int32(time.Now().Unix())
 	receipt = append(receipt, receiptRecord)
-	//e(line + "  [RECEIPT]")
+	e(line + "  [RECEIPT]")
 }
 
 func e(line string) {

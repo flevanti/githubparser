@@ -1,0 +1,28 @@
+###   this is a comment
+###   MDT is metadata , used to pass values into the system   key=value
+###   OKK is a rule to allow a file/folder
+###   KOO is a rule to block a file/folder
+###   general rules around folders are applied so adding a / in front of the path means project root absolute path
+###
+###   KOO /script  means tha all files and folders under the root folder script will trigger it
+###   KOO script   means that all files and folders named or containing script will trigger it
+###   KOO script/  means that all files and folders under any folder named or containing script will trigger it
+###
+###   you can add exceptions
+###   rules are applied in the same order they are found
+###
+###   KOO /script/              block all changes in the root script folder
+###   OKK /script/myscript.go   this file is permitted
+###
+###   Play around with the config and use the verbose receipt
+###
+
+MDT verbosereceipt=1
+OKK scripts
+OKK /sites/all/scripts/
+KOO /sites/all/scripts/maintenance
+KOO fake
+KOO /src/mongo
+OKK /src/mongo/installer
+OKK /src/mongo/util
+
