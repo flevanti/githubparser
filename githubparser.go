@@ -392,13 +392,13 @@ func sendSlack(message string, filesList string, okFlag bool) {
 	var attachmentColor string
 	if filesList != "" {
 		attachmentTitle = "FILES LIST"
-		attachmentColor = "#FF0000"
 	}
 
 	if okFlag {
 		emoji = os.Getenv("SLACK_EMOJI_OK")
 	} else {
 		emoji = os.Getenv("SLACK_EMOJI_KO")
+		attachmentColor = "#FF0000"
 	}
 
 	hook := slack.NewWebHook(os.Getenv("SLACK_WEBHOOK_URL"))
