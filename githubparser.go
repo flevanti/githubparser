@@ -32,6 +32,7 @@ var projrootprefix = "[PROOT]"
 var configFileName = "config"
 var dummyPayloadFileName = "payload.json"
 var verboseReceipt int
+var messageAlways int
 var receipt []Receipt
 
 type Rule struct {
@@ -348,6 +349,11 @@ func loadConfigMetadata(line string) (error) {
 		addToReceipt("updating receipt log level to "+strconv.Itoa(valueToInt), true)
 		verboseReceipt = valueToInt
 	}
+	if key == "messagealways" {
+		valueToInt, _ := strconv.Atoi(value)
+		addToReceipt("message always flag is now "+strconv.Itoa(valueToInt), true)
+		messageAlways = valueToInt
+	}
 
 	return nil
 }
@@ -381,8 +387,10 @@ func sendReceipt(request Request) {
 
 	message += "\nPusher: " + request.Pusher.Name + "   " + request.Pusher.Email + "\n"
 	message += "_" + getLocalEnvSituationString() + "_\n"
+	if messageAlways == 1 || rulesResultsCountKO > 0 {
+		sendSlack(message, filesList, rulesResultsCountKO == 0)
 
-	sendSlack(message, filesList, rulesResultsCountKO == 0)
+	}
 }
 
 func sendSlack(message string, filesList string, okFlag bool) {
