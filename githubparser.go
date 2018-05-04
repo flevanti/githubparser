@@ -474,7 +474,7 @@ func addToReceipt(line string, OnlyForVerboseReceipt bool) {
 	receiptRecord.dateTime = getDT()
 	receiptRecord.unixTime = int32(time.Now().Unix())
 	receipt = append(receipt, receiptRecord)
-	e(line + "  [RECEIPT]")
+	//e(line + "  [RECEIPT]")
 }
 
 func e(line string) {
